@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Birr Budget</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- ================= HEADER ================= -->
+
+    <header class="header">
+
+        <div class="logo">
+            <span>₿</span>
+            <h1>Birr Budget</h1>
+        </div>
+
+        <nav>
+            <a href="#dashboard">Dashboard</a>
+            <a href="#transaction">Add Transaction</a>
+            <a href="#categories">Categories</a>
+        </nav>
+
+    </header>
+
+
+    <!-- ================= MAIN ================= -->
+
+    <main class="container">
+
+
+        <!-- ================= DASHBOARD ================= -->
+
+        <section class="card dashboard" id="dashboard">
+
+            <div class="section-header">
+                <h2>Dashboard</h2>
+                <span>⚙️</span>
+            </div>
+
+
+            <!-- Monthly Budget -->
+
+            <div class="monthly-budget">
+
+                <h3>Monthly Budget</h3>
+
+                <div class="budget-circle">
+
+                    <div>
+                        <strong id="spentPercentage">0%</strong>
+                        <span>Spent</span>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- Balance -->
+
+            <div class="balance">
+
+                <div class="balance-header">
+                    <h3>Total Balance</h3>
+                    <div class="currency-picker">
+                        <label for="currencySelect" class="currency-label">Currency:</label>
+                        <select id="currencySelect" class="currency-select" aria-label="Select Currency">
+                            <option value="ETB">ETB</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="balance-row">
+
+                    <strong id="balance">0.00 ETB</strong>
+
+                    <span id="incomeDisplay">
+                        + 0.00 ETB
+                    </span>
+
+                </div>
+
+                <div id="currencyWatch" class="currency-watch"></div>
+
+            </div>
+
+
+            <!-- Recent Transactions -->
+
+            <div class="transactions">
+
+                <h3>Recent Transactions</h3>
+
+                <div id="transactionList">
+
+                    <!-- JavaScript will insert transactions here -->
+
+                    <p class="empty-message">
+                        No transactions yet.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <button
+                class="primary-btn"
+                id="showTransactionBtn"
+            >
+                + Add Transaction
+            </button>
+
+
+            <!-- Bottom Navigation -->
+
+            <div class="bottom-nav">
+
+                <a href="#dashboard">
+                    🏠
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="#categories">
+                    ☷
+                    <span>Categories</span>
+                </a>
+
+                <a href="#reports">
+                    📊
+                    <span>Reports</span>
+                </a>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= ADD TRANSACTION ================= -->
+
+        <section
+            class="card transaction-card"
+            id="transaction"
+        >
+
+            <div class="section-header">
+
+                <h2>Add Transaction</h2>
+
+            </div>
+
+
+            <form id="transactionForm">
+
+
+                <!-- Transaction Type -->
+
+                <div class="form-group">
+
+                    <label for="type">
+                        Transaction Type
+                    </label>
+
+                    <select id="type" name="type">
+
+                        <option value="expense">
+                            Expense
+                        </option>
+
+                        <option value="income">
+                            Income
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <!-- Amount -->
+
+                <div class="form-group">
+
+                    <label for="amount">
+                        Amount
+                    </label>
+
+                    <input
+                        type="number"
+                        id="amount"
+                        name="amount"
+                        placeholder="0.00"
+                        min="0"
+                        step="0.01"
+                        required
+                    >
+
+                </div>
+
+
+                <!-- Category -->
+
+                <div class="form-group">
+
+                    <label>
+                        Category
+                    </label>
+
+                    <div class="categories-select">
+
+                        <button
+                            type="button"
+                            class="category-btn active"
+                            data-category="Food"
+                        >
+                            🍔
+                            <span>Food</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="category-btn"
+                            data-category="Transport"
+                        >
+                            🚌
+                            <span>Transport</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="category-btn"
+                            data-category="Utilities"
+                        >
+                            💡
+                            <span>Utilities</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="category-btn"
+                            data-category="Entertainment"
+                        >
+                            🎮
+                            <span>Entertainment</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="category-btn"
+                            data-category="Shopping"
+                        >
+                            🛒
+                            <span>Shopping</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="category-btn"
+                            data-category="Health"
+                        >
+                            ❤️
+                            <span>Health</span>
+                        </button>
+
+                    </div>
+
+                    <input
+                        type="hidden"
+                        id="category"
+                        name="category"
+                        value="Food"
+                    >
+
+                </div>
+
+
+                <!-- Date -->
+
+                <div class="form-group">
+
+                    <label for="date">
+                        Date
+                    </label>
+
+                    <input
+                        type="date"
+                        id="date"
+                        name="date"
+                        required
+                    >
+
+                </div>
+
+
+                <!-- Notes -->
+
+                <div class="form-group">
+
+                    <label for="notes">
+                        Notes (Optional)
+                    </label>
+
+                    <textarea
+                        id="notes"
+                        name="notes"
+                        placeholder="Add a note..."
+                    ></textarea>
+
+                </div>
+
+
+                <button
+                    type="submit"
+                    class="primary-btn"
+                >
+                    Save Transaction
+                </button>
+
+            </form>
+
+
+            <div class="bottom-nav">
+
+                <a href="#dashboard">
+                    🏠
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="#categories">
+                    ☷
+                    <span>Categories</span>
+                </a>
+
+                <a href="#reports">
+                    📊
+                    <span>Reports</span>
+                </a>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= CATEGORIES ================= -->
+
+        <section
+            class="card categories-card"
+            id="categories"
+        >
+
+            <div class="section-header">
+
+                <h2>Budget Categories</h2>
+
+                <button class="add-category">
+                    +
+                </button>
+
+            </div>
+
+
+            <div id="categoryList">
+
+
+                <!-- Groceries -->
+
+                <div class="budget-category" data-category="Food">
+
+                    <div class="category-info">
+
+                        <span>
+                            🛒 Food
+                        </span>
+
+                        <strong>
+                            <span class="category-spent">
+                                0
+                            </span>
+                            /
+                            <span class="category-budget">
+                                500
+                            </span>
+                            ETB
+                        </strong>
+
+                    </div>
+
+                    <div class="progress">
+
+                        <div
+                            class="progress-bar"
+                            style="width: 0%"
+                        ></div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Utilities -->
+
+                <div class="budget-category" data-category="Utilities">
+
+                    <div class="category-info">
+
+                        <span>
+                            💡 Utilities
+                        </span>
+
+                        <strong>
+                            <span class="category-spent">
+                                0
+                            </span>
+                            /
+                            <span class="category-budget">
+                                200
+                            </span>
+                            ETB
+                        </strong>
+
+                    </div>
+
+                    <div class="progress">
+
+                        <div
+                            class="progress-bar"
+                            style="width: 0%"
+                        ></div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Rent -->
+
+                <div class="budget-category" data-category="Rent">
+
+                    <div class="category-info">
+
+                        <span>
+                            🏠 Rent
+                        </span>
+
+                        <strong>
+                            <span class="category-spent">
+                                0
+                            </span>
+                            /
+                            <span class="category-budget">
+                                1200
+                            </span>
+                            ETB
+                        </strong>
+
+                    </div>
+
+                    <div class="progress">
+
+                        <div
+                            class="progress-bar"
+                            style="width: 0%"
+                        ></div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Transportation -->
+
+                <div class="budget-category"  data-category="Transport">
+
+                    <div class="category-info">
+
+                        <span>
+                            🚌 Transport
+                        </span>
+
+                        <strong>
+                            <span class="category-spent">
+                                0
+                            </span>
+                            /
+                            <span class="category-budget">
+                                100
+                            </span>
+                            ETB
+                        </strong>
+
+                    </div>
+
+                    <div class="progress">
+
+                        <div
+                            class="progress-bar"
+                            style="width: 0%"
+                        ></div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Entertainment -->
+
+                <div class="budget-category" data-category="Entertainment">
+
+                    <div class="category-info">
+
+                        <span>
+                            🎮 Entertainment
+                        </span>
+
+                        <strong>
+                            <span class="category-spent">
+                                0
+                            </span>
+                            /
+                            <span class="category-budget">
+                                150
+                            </span>
+                            ETB
+                        </strong>
+
+                    </div>
+
+                    <div class="progress">
+
+                        <div
+                            class="progress-bar"
+                            style="width: 0%"
+                        ></div>
+
+                    </div>
+
+                </div>
+
+
+            </div>
+
+
+            <div class="bottom-nav">
+
+                <a href="#dashboard">
+                    🏠
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="#categories">
+                    ☷
+                    <span>Categories</span>
+                </a>
+
+                <a href="#reports">
+                    📊
+                    <span>Reports</span>
+                </a>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <script src="script.js"></script>
+
+</body>
+</html>
