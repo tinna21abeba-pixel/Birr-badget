@@ -1,45 +1,10 @@
 const API = "https://open.er-api.com/v6/latest/ETB";
-const STORAGE_KEY = "birr-budget-data-v2";
+const STORAGE_KEY = "birr-budget-data-v3";
 
-const defaultTransactions = [
-    {
-        id: 1,
-        title: "Groceries",
-        amount: 550,
-        type: "expense",
-        category: "Food",
-        date: "2026-08-30",
-        notes: "Weekly shopping"
-    },
-    {
-        id: 2,
-        title: "Salary",
-        amount: 20000,
-        type: "income",
-        category: "Income",
-        date: "2026-08-29",
-        notes: "Monthly salary"
-    },
-    {
-        id: 3,
-        title: "Transport",
-        amount: 200,
-        type: "expense",
-        category: "Transport",
-        date: "2026-08-28",
-        notes: "Taxi"
-    }
-];
-
-const defaultCategoryBudgets = {
-    "Food": 500,
-    "Utilities": 200,
-    "Rent": 1200,
-    "Transport": 100,
-    "Entertainment": 150,
-    "Shopping": 300,
-    "Health": 200
-};
+// The user creates their own income and budget categories during first setup.
+// No default income, transactions, or category budgets are pre-filled.
+const defaultTransactions = [];
+const defaultCategoryBudgets = {};
 
 const categoryIcons = {
     Food: "🍔",
@@ -70,6 +35,8 @@ const fallbackRates = {
 const state = {
     transactions: [],
     categoryBudgets: { ...defaultCategoryBudgets },
+    totalIncome: 0,
+    setupComplete: false,
     rates: { ...fallbackRates },
     currency: "ETB",
     watchlist: ["USD", "EUR"]
@@ -94,6 +61,8 @@ function saveState() {
         const payload = {
             transactions: state.transactions,
             categoryBudgets: state.categoryBudgets,
+            totalIncome: state.totalIncome,
+            setupComplete: state.setupComplete,
             currency: state.currency,
             watchlist: state.watchlist
         };
@@ -108,10 +77,12 @@ function loadState() {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
             const data = JSON.parse(saved);
-            state.transactions = Array.isArray(data.transactions) ? data.transactions : defaultTransactions;
-            state.categoryBudgets = (data.categoryBudgets && Object.keys(data.categoryBudgets).length > 0)
+            state.transactions = Array.isArray(data.transactions) ? data.transactions : [];
+            state.categoryBudgets = data.categoryBudgets && typeof data.categoryBudgets === "object"
                 ? data.categoryBudgets
-                : { ...defaultCategoryBudgets };
+                : {};
+            state.totalIncome = Number(data.totalIncome || 0);
+            state.setupComplete = Boolean(data.setupComplete);
             state.currency = data.currency || "ETB";
             state.watchlist = Array.isArray(data.watchlist) ? data.watchlist : ["USD", "EUR"];
             return;
@@ -120,8 +91,10 @@ function loadState() {
         console.warn("Could not parse saved data, initializing defaults:", err);
     }
 
-    state.transactions = [...defaultTransactions];
-    state.categoryBudgets = { ...defaultCategoryBudgets };
+    state.transactions = [];
+    state.categoryBudgets = {};
+    state.totalIncome = 0;
+    state.setupComplete = false;
     state.currency = "ETB";
     state.watchlist = ["USD", "EUR"];
 }
@@ -178,9 +151,7 @@ function renderCurrencyOptions() {
 }
 
 function calculateIncome() {
-    return state.transactions
-        .filter(t => t.type === "income")
-        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+    return Number(state.totalIncome || 0);
 }
 
 function calculateTotalExpenses() {
@@ -198,6 +169,15 @@ function calculateTotalBudget() {
         .reduce((sum, budget) => sum + Number(budget || 0), 0);
 }
 
+// How much income is still free to allocate to budgets.
+// Pass a category name to ignore its current budget (used when editing it).
+function getAvailableBudgetRoom(excludeCategory = null) {
+    const allocated = Object.entries(state.categoryBudgets)
+        .filter(([name]) => name.toLowerCase() !== String(excludeCategory || "").toLowerCase())
+        .reduce((sum, [, budget]) => sum + Number(budget || 0), 0);
+    return Math.max(0, calculateIncome() - allocated);
+}
+
 function getCategorySpent(category) {
     return state.transactions
         .filter(t => t.category.toLowerCase() === category.toLowerCase() && t.type === "expense")
@@ -210,9 +190,12 @@ function updateDashboard() {
     const currentBalance = calculateBalance();
     const totalBudget = calculateTotalBudget();
 
-    const expensePercentage = totalBudget > 0
+    const rawPercentage = totalBudget > 0
         ? (expenses / totalBudget) * 100
         : (income > 0 ? (expenses / income) * 100 : 0);
+
+    // Never show more than 100%
+    const expensePercentage = Math.min(rawPercentage, 100);
 
     if (balance) {
         balance.textContent = formatCurrency(currentBalance, state.currency);
@@ -228,7 +211,7 @@ function updateDashboard() {
     }
 
     if (budgetCircle) {
-        const deg = Math.min((expensePercentage / 100) * 360, 360);
+        const deg = (expensePercentage / 100) * 360;
         budgetCircle.style.setProperty("--spent-deg", `${deg}deg`);
     }
 
@@ -291,12 +274,14 @@ function renderCurrencyWatch(currentBalance, totalExpenses) {
 function renderTransactions() {
     if (!transactionList) return;
 
-    if (state.transactions.length === 0) {
+    const expenseList = state.transactions.filter(t => t.type === "expense");
+
+    if (expenseList.length === 0) {
         transactionList.innerHTML = `<p class="empty-message">No transactions yet.</p>`;
         return;
     }
 
-    const itemsHtml = state.transactions.map(t => {
+    const itemsHtml = expenseList.map(t => {
         const isIncome = t.type === "income";
         const sign = isIncome ? "+" : "−";
         const typeClass = isIncome ? "income" : "expense";
@@ -336,6 +321,20 @@ function renderTransactions() {
 }
 
 function deleteTransaction(id) {
+    const transaction = state.transactions.find(t => String(t.id) === String(id));
+
+    if (transaction && transaction.type === "income") {
+        const newIncome = state.totalIncome - Number(transaction.amount || 0);
+
+        // Removing income must not push spending or budgets above total income.
+        if (newIncome < calculateTotalExpenses() || newIncome < calculateTotalBudget()) {
+            alert("Removing this income would put your spending or budgets above your total income. Lower those first.");
+            return;
+        }
+
+        state.totalIncome = Math.max(0, newIncome);
+    }
+
     state.transactions = state.transactions.filter(t => String(t.id) !== String(id));
     saveState();
     updateAppView();
@@ -345,6 +344,15 @@ function updateCategoryBudgets() {
     if (!categoryList) return;
 
     const categories = Object.keys(state.categoryBudgets);
+
+    if (categories.length === 0) {
+        categoryList.innerHTML = `
+            <p class="empty-message">
+                No budget categories yet. Add your own category and budget.
+            </p>
+        `;
+        return;
+    }
 
     const categoriesHtml = categories.map(category => {
         const budget = Number(state.categoryBudgets[category] || 0);
@@ -367,12 +375,22 @@ function updateCategoryBudgets() {
                         ${state.currency}
                     </strong>
                 </div>
+
                 <div class="progress">
                     <div
                         class="progress-bar ${isOverBudget ? "over-budget" : ""}"
                         style="width: ${Math.min(percentage, 100)}%"
                         title="${Math.round(percentage)}% of budget used"
                     ></div>
+                </div>
+
+                <div class="budget-actions">
+                    <button type="button" class="edit-budget-btn" data-category="${escapeHtml(category)}">
+                        Edit
+                    </button>
+                    <button type="button" class="delete-budget-btn" data-category="${escapeHtml(category)}">
+                        Delete
+                    </button>
                 </div>
             </div>
         `;
@@ -381,9 +399,70 @@ function updateCategoryBudgets() {
     categoryList.innerHTML = categoriesHtml;
 }
 
+function editBudgetCategory(category) {
+    if (!(category in state.categoryBudgets)) return;
+
+    const currentBudget = Number(state.categoryBudgets[category] || 0);
+    const room = getAvailableBudgetRoom(category);
+
+    const newBudget = Number(
+        prompt(
+            `Enter the new budget for "${category}" (max ${room.toLocaleString()} ETB):`,
+            currentBudget
+        )
+    );
+
+    if (!Number.isFinite(newBudget) || newBudget <= 0) {
+        alert("Please enter a valid budget greater than 0.");
+        return;
+    }
+
+    if (newBudget > room) {
+        alert(
+            `Total budgets can't exceed your income. You can allocate at most ${room.toLocaleString()} ETB to "${category}".`
+        );
+        return;
+    }
+
+    state.categoryBudgets[category] = newBudget;
+    saveState();
+    updateAppView();
+}
+
+function deleteBudgetCategory(category) {
+    if (!(category in state.categoryBudgets)) return;
+
+    const hasTransactions = state.transactions.some(
+        t => t.type === "expense" &&
+            String(t.category).toLowerCase() === String(category).toLowerCase()
+    );
+
+    if (hasTransactions) {
+        alert(
+            `"${category}" has expense transactions. Delete or move those transactions first.`
+        );
+        return;
+    }
+
+    if (!confirm(`Delete the "${category}" budget category?`)) return;
+
+    delete state.categoryBudgets[category];
+    delete categoryIcons[category];
+
+    saveState();
+    updateAppView();
+}
+
 function promptAddNewCategory() {
     const existingModal = document.querySelector(".modal-overlay");
     if (existingModal) existingModal.remove();
+
+    const room = getAvailableBudgetRoom();
+
+    if (room <= 0) {
+        alert("All of your income is already allocated to budgets. Lower another category's budget first.");
+        return;
+    }
 
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -393,14 +472,14 @@ function promptAddNewCategory() {
                 <h3>Add Budget Category</h3>
                 <button type="button" class="modal-close">×</button>
             </div>
-            <form id="newCategoryForm">
+            <form id="newCategoryForm" novalidate>
                 <div class="form-group">
                     <label for="newCatName">Category Name</label>
                     <input type="text" id="newCatName" placeholder="e.g. Education, Travel" required>
                 </div>
                 <div class="form-group">
-                    <label for="newCatBudget">Monthly Budget (ETB)</label>
-                    <input type="number" id="newCatBudget" placeholder="e.g. 500" min="1" step="10" required>
+                    <label for="newCatBudget">Monthly Budget (ETB) — up to ${room.toLocaleString()}</label>
+                    <input type="number" id="newCatBudget" placeholder="e.g. 500" min="0" step="any">
                 </div>
                 <div class="form-group">
                     <label for="newCatIcon">Emoji Icon</label>
@@ -439,26 +518,226 @@ function promptAddNewCategory() {
         const catBudget = Number(overlay.querySelector("#newCatBudget").value);
         const catIcon = overlay.querySelector("#newCatIcon").value.trim() || "📁";
 
-        if (!catName || catBudget <= 0) return;
+        if (!catName || !Number.isFinite(catBudget) || catBudget <= 0) return;
+
+        // Prevent duplicate category names (case-insensitive)
+        const duplicate = Object.keys(state.categoryBudgets)
+            .some(name => name.toLowerCase() === catName.toLowerCase());
+        if (duplicate) {
+            alert(`The category "${catName}" already exists.`);
+            return;
+        }
+
+        // Budgets can't exceed total income
+        const availableRoom = getAvailableBudgetRoom();
+        if (catBudget > availableRoom) {
+            alert(
+                `Not enough income left. You can budget at most ${availableRoom.toLocaleString()} ETB for this category.`
+            );
+            return;
+        }
 
         state.categoryBudgets[catName] = catBudget;
         categoryIcons[catName] = catIcon;
 
-        const categoriesSelect = document.querySelector(".categories-select");
-        if (categoriesSelect && !categoriesSelect.querySelector(`[data-category="${catName}"]`)) {
-            const newBtn = document.createElement("button");
-            newBtn.type = "button";
-            newBtn.className = "category-btn";
-            newBtn.dataset.category = catName;
-            newBtn.innerHTML = `${catIcon} <span>${escapeHtml(catName)}</span>`;
-            attachCategoryBtnEvent(newBtn);
-            categoriesSelect.appendChild(newBtn);
-        }
-
         saveState();
+        renderCategoryButtons();
         updateCategoryBudgets();
         updateDashboard();
         closeModal();
+    });
+}
+
+function renderCategoryButtons() {
+    const categoriesSelect = document.querySelector(".categories-select");
+    if (!categoriesSelect) return;
+
+    // Remove old category buttons so the user's categories are the source of truth.
+    categoriesSelect.querySelectorAll(".category-btn").forEach(btn => btn.remove());
+
+    const addButton = categoriesSelect.querySelector(".add-category");
+
+    Object.keys(state.categoryBudgets).forEach(category => {
+        const icon = categoryIcons[category] || "📁";
+        const button = document.createElement("button");
+
+        button.type = "button";
+        button.className = "category-btn";
+        button.dataset.category = category;
+        button.innerHTML = `${icon} <span>${escapeHtml(category)}</span>`;
+
+        attachCategoryBtnEvent(button);
+
+        if (addButton) {
+            categoriesSelect.insertBefore(button, addButton);
+        } else {
+            categoriesSelect.appendChild(button);
+        }
+    });
+
+    const firstCategoryBtn = categoriesSelect.querySelector(".category-btn");
+
+    if (firstCategoryBtn && categoryInput) {
+        document.querySelectorAll(".category-btn").forEach(btn => btn.classList.remove("active"));
+        firstCategoryBtn.classList.add("active");
+        categoryInput.value = firstCategoryBtn.dataset.category;
+    }
+}
+
+function showInitialSetupModal() {
+    if (state.setupComplete) return;
+
+    const existingModal = document.querySelector(".modal-overlay.setup-modal");
+    if (existingModal) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay setup-modal";
+    overlay.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Set Up Your Budget</h3>
+            </div>
+
+            <p style="margin-bottom: 16px; color: #666;">
+                Start by entering your total income and deciding how much you want
+                to budget for each category. Your category budgets can't add up to
+                more than your income.
+            </p>
+
+            <form id="budgetSetupForm">
+                <div class="form-group">
+                    <label for="setupIncome">Total Income (ETB)</label>
+                    <input
+                        type="number"
+                        id="setupIncome"
+                        min="0"
+                        step="0.01"
+                        placeholder="e.g. 20000"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Your Budget Categories</label>
+                    <div id="setupCategories"></div>
+                    <p id="setupRemaining" style="font-size: 12px; color: #777; margin: 6px 0;"></p>
+                    <button type="button" class="modal-btn-cancel" id="addSetupCategory">
+                        + Add Category
+                    </button>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="modal-btn-submit">
+                        Start Budget
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const categoriesContainer = overlay.querySelector("#setupCategories");
+    const incomeInput = overlay.querySelector("#setupIncome");
+    const remainingText = overlay.querySelector("#setupRemaining");
+
+    // Live "remaining to allocate" hint
+    function updateRemainingHint() {
+        const income = Number(incomeInput.value) || 0;
+        const total = [...categoriesContainer.querySelectorAll(".setup-category-budget")]
+            .reduce((sum, input) => sum + (Number(input.value) || 0), 0);
+        const remaining = income - total;
+
+        remainingText.textContent = `Remaining to allocate: ${remaining.toLocaleString()} ETB`;
+        remainingText.style.color = remaining < 0 ? "#e63946" : "#777";
+    }
+
+    function addSetupRow() {
+        const row = document.createElement("div");
+        row.className = "setup-category-row";
+        row.style.cssText = "display:grid;grid-template-columns:1fr 140px auto;gap:8px;margin-bottom:8px;";
+
+        row.innerHTML = `
+            <input type="text" class="setup-category-name" placeholder="Category name" required>
+            <input type="number" class="setup-category-budget" placeholder="Budget" min="0" step="0.01" required>
+            <button type="button" class="modal-btn-cancel remove-setup-category">×</button>
+        `;
+
+        row.querySelector(".remove-setup-category").addEventListener("click", () => {
+            if (categoriesContainer.children.length > 1) {
+                row.remove();
+                updateRemainingHint();
+            }
+        });
+
+        row.querySelector(".setup-category-budget").addEventListener("input", updateRemainingHint);
+
+        categoriesContainer.appendChild(row);
+    }
+
+    addSetupRow();
+    updateRemainingHint();
+
+    incomeInput.addEventListener("input", updateRemainingHint);
+    overlay.querySelector("#addSetupCategory").addEventListener("click", addSetupRow);
+
+    overlay.querySelector("#budgetSetupForm").addEventListener("submit", event => {
+        event.preventDefault();
+
+        const income = Number(incomeInput.value);
+        const rows = [...categoriesContainer.querySelectorAll(".setup-category-row")];
+
+        if (!Number.isFinite(income) || income <= 0) {
+            alert("Please enter your total income greater than 0.");
+            return;
+        }
+
+        const budgets = {};
+        const usedNames = new Set();
+        let totalBudgeted = 0;
+
+        for (const row of rows) {
+            const name = row.querySelector(".setup-category-name").value.trim();
+            const budget = Number(row.querySelector(".setup-category-budget").value);
+
+            if (!name || !Number.isFinite(budget) || budget < 0) {
+                alert("Please enter a valid category name and budget for every row.");
+                return;
+            }
+
+            const normalizedName = name.toLowerCase();
+
+            if (usedNames.has(normalizedName)) {
+                alert(`The category "${name}" was entered more than once.`);
+                return;
+            }
+
+            usedNames.add(normalizedName);
+            budgets[name] = budget;
+            totalBudgeted += budget;
+        }
+
+        // Budgets can't exceed total income
+        if (totalBudgeted > income) {
+            alert(
+                `Your category budgets total ${totalBudgeted.toLocaleString()} ETB, which is more than your income (${income.toLocaleString()} ETB). Please lower them.`
+            );
+            return;
+        }
+
+        Object.keys(budgets).forEach(name => {
+            if (!categoryIcons[name]) {
+                categoryIcons[name] = "📁";
+            }
+        });
+
+        state.totalIncome = income;
+        state.categoryBudgets = budgets;
+        state.setupComplete = true;
+
+        saveState();
+        updateAppView();
+        overlay.remove();
     });
 }
 
@@ -494,6 +773,14 @@ if (transactionForm) {
         const date = dateInput ? dateInput.value : new Date().toISOString().split("T")[0];
         const notes = notesInput ? notesInput.value.trim() : "";
 
+        // Spending can't go beyond the remaining balance (total income).
+        if (type === "expense" && amount > calculateBalance()) {
+            alert(
+                `This expense is more than your remaining balance (${calculateBalance().toLocaleString()} ETB).`
+            );
+            return;
+        }
+
         const newTransaction = {
             id: Date.now(),
             title: notes ? notes.slice(0, 25) : category,
@@ -504,7 +791,14 @@ if (transactionForm) {
             notes: notes
         };
 
-        state.transactions.unshift(newTransaction);
+        if (type === "income") {
+            // Income raises total income (and so the remaining balance),
+            // but is not listed as a transaction.
+            state.totalIncome += amount;
+        } else {
+            state.transactions.unshift(newTransaction);
+        }
+
         saveState();
         updateAppView();
 
@@ -541,6 +835,22 @@ if (transactionList) {
         if (deleteBtn) {
             const id = deleteBtn.dataset.id;
             deleteTransaction(id);
+        }
+    });
+}
+
+if (categoryList) {
+    categoryList.addEventListener("click", function (event) {
+        const editBtn = event.target.closest(".edit-budget-btn");
+        const deleteBtn = event.target.closest(".delete-budget-btn");
+
+        if (editBtn) {
+            editBudgetCategory(editBtn.dataset.category);
+            return;
+        }
+
+        if (deleteBtn) {
+            deleteBudgetCategory(deleteBtn.dataset.category);
         }
     });
 }
@@ -597,6 +907,7 @@ function escapeHtml(str) {
 function updateAppView() {
     updateDashboard();
     renderTransactions();
+    renderCategoryButtons();
     updateCategoryBudgets();
 }
 
@@ -610,6 +921,10 @@ async function init() {
 
     renderCurrencyOptions();
     updateAppView();
+
+    if (!state.setupComplete) {
+        showInitialSetupModal();
+    }
 
     await loadRates();
 }

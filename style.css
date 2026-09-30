@@ -119,7 +119,7 @@ body {
     overflow: hidden;
 }
 
-.card > *:not(.bottom-nav) {
+.card>*:not(.bottom-nav) {
     margin-left: 25px;
     margin-right: 25px;
 }
@@ -191,7 +191,7 @@ body {
     border-radius: 50%;
 }
 
-.budget-circle > div {
+.budget-circle>div {
     position: relative;
     z-index: 1;
 }
