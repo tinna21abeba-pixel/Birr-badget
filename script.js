@@ -186,16 +186,16 @@ function getCategorySpent(category) {
 
 function updateDashboard() {
     const income = calculateIncome();
-    const expenses = calculateTotalExpenses();
-    const currentBalance = calculateBalance();
-    const totalBudget = calculateTotalBudget();
+const expenses = calculateTotalExpenses();
+const currentBalance = calculateBalance();
 
-    const rawPercentage = totalBudget > 0
-        ? (expenses / totalBudget) * 100
-        : (income > 0 ? (expenses / income) * 100 : 0);
+const rawPercentage =
+    income > 0
+        ? (expenses / income) * 100
+        : 0;
 
-    // Never show more than 100%
-    const expensePercentage = Math.min(rawPercentage, 100);
+// Never show more than 100%
+const expensePercentage = Math.min(rawPercentage, 100);
 
     if (balance) {
         balance.textContent = formatCurrency(currentBalance, state.currency);
